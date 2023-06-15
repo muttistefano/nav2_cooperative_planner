@@ -1,0 +1,5 @@
+<library path="nav2_cooperative_planner">
+	<class name="nav2_cooperative_planner/CoopPlanner" type="nav2_cooperative_planner::CoopPlanner" base_class_type="nav2_core::GlobalPlanner">
+	  <description></description>
+	</class>
+</library>

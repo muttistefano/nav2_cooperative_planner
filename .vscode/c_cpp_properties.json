@@ -1,0 +1,33 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/opt/ros/rolling/include/**",
+                "/home/blanker/lampo_ws_ros2_rolling/install/nav2_util/include/",
+                "/home/blanker/lampo_ws_ros2_rolling/install/nav2_msgs/include/",
+                "/home/blanker/lampo_ws_ros2_rolling/install/nav2_costmap_2d/include/",
+                "/home/blanker/lampo_ws_ros2_rolling/build/nav2_msgs/rosidl_generator_cpp",
+                "/opt/ros/rolling/include/tf2_geometry_msgs",
+                "/opt/ros/rolling/include/rclcpp_lifecycle",
+                "/opt/ros/rolling/include/map_msgs",
+                "/opt/ros/rolling/include/tf2",
+                "/opt/ros/rolling/include/tf2_ros",
+                "/opt/ros/rolling/include/ament_index_cpp",
+                "/opt/ros/rolling/include/tf2_msgs",
+                "/opt/ros/rolling/include/lifecycle_msgs",
+                "/opt/ros/rolling/include/rcl_lifecycle",
+                "/opt/ros/rolling/include",
+                "/opt/ros/rolling/include/bond",
+                "/home/blanker/lampo_ws_ros2_rolling/install/nav2_core/include"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c17",
+            "cppStandard": "gnu++17",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}
