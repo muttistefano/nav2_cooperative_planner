@@ -262,27 +262,49 @@ nav_msgs::msg::Path CoopPlanner::createPlan(
   RCLCPP_INFO_STREAM(this->logger_,"follower frame " << follower_frame_);
 
   unsigned char * lead_map =  costmap_->getCharMap();
-  // unsigned char * foll_map =  costmap_follower_->getCharMap();
+  unsigned char * foll_map =  costmap_follower_->getCharMap();
 
   int * merged_map =  new int[lead_x*lead_y]();
 
   double resolution = costmap_->getResolution();
-  // uint8_t shift_x = uint8_t(shift_map_tf.getOrigin().getX()/resolution);
-  // uint8_t shift_y = uint8_t(shift_map_tf.getOrigin().getY()/resolution);
+  int shift_x = int(shift_map_tf.getOrigin().getX()/resolution);
+  int shift_y = int(shift_map_tf.getOrigin().getY()/resolution);
 
-  for(int y=0;y<lead_y;y++)
+
+  RCLCPP_INFO_STREAM(this->logger_,"shift_x " << shift_x);
+  RCLCPP_INFO_STREAM(this->logger_,"shift_y " << shift_y);
+
+  for(int x=0;x<lead_x;x++)
   {
-    for(int x=0;x<lead_x;x++)
+    for(int y=0;y<lead_y;y++)
     {
-      int idx = x * lead_y + y;
-      // merged_map[idx] = static_cast<int>(lead_map[idx]);
-      // std::cout << static_cast<int>(lead_map[idx]) << "\n" << std::flush;
-      // int idx_2_x = (x-shift_x) > 0 ?  (x-shift_x)  : 0 ;
-      // int idx_2_y = (y-shift_y) > 0 ?  (y-shift_y)  : 0 ;
+      int idx = y * lead_x + x;
+      merged_map[idx] = static_cast<int>(lead_map[idx]/2);
+      // int idx_2_x = ((x+shift_x) > 0) & ((x+shift_x) < lead_x) ?  (x+shift_x)  : 0 ;
+      // int idx_2_y = ((y+shift_y) > 0) & ((y+shift_y) < lead_y) ?  (y+shift_y)  : 0 ;
+      // // //TODO fix is not 0
+      // int idx_2 = idx_2_x * lead_y + idx_2_y;
+      // merged_map[idx_2] += (static_cast<int>(foll_map[idx]));
+      // if (merged_map[idx_2] > 255)
+      // {
+      //   merged_map[idx_2] = 255;
+      // }
+        
+      int idx_2_x = ((x-shift_x) > 0) && ((x-shift_x) < lead_x) ?  (x-shift_x)  : 0 ;
+      int idx_2_y = ((y-shift_y) > 0) && ((y-shift_y) < lead_y) ?  (y-shift_y)  : 0 ;
       // //TODO fix is not 0
-      // int idx_2 = idx_2_y * lead_x + idx_2_x;
-      // merged_map[idx_2] = (static_cast<int>(lead_map[idx]) + static_cast<int>(foll_map[idx]))/2;
-      merged_map[idx] = (static_cast<int>(lead_map[idx]));
+      if ((idx_2_x==0) || (idx_2_y==0))
+      {
+        continue;
+      }
+
+      int idx_2 = idx_2_y * lead_x + idx_2_x;
+      merged_map[idx] += (static_cast<int>(foll_map[idx_2]/2));
+      // if (merged_map[idx] >= 255)
+      // {
+      //   merged_map[idx] = 100;
+      // }
+
     }
   }
 
