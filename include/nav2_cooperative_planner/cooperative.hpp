@@ -119,7 +119,7 @@ public:
    * @param allow_unknown Whether or not the planner should be allowed to plan through
    *   unknown space
    */
-  void setCostmap(const COSTTYPE * cmap, bool isROS = true, bool allow_unknown = true);
+  void setCostmap(const int * cmap, bool isROS = true, bool allow_unknown = true);
 
   /**
    * @brief  Calculates a plan using the A* heuristic, returns true if one is found

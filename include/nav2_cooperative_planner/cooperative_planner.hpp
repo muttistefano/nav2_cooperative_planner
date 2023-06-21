@@ -214,6 +214,8 @@ protected:
 
   void costmap_follower_call(const nav_msgs::msg::OccupancyGrid & msg);
 
+  int * merged_map;
+
   ///////////////////////////////////
 
   // The global frame of the costmap
