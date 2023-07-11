@@ -28,6 +28,7 @@
 #include "nav2_util/lifecycle_node.hpp"
 #include "nav2_costmap_2d/costmap_2d_ros.hpp"
 #include "nav2_util/geometry_utils.hpp"
+#include "AStar/AStar.hpp"
 
 namespace nav2_cooperative_planner
 {
@@ -185,7 +186,7 @@ protected:
   bool isPlannerOutOfDate();
 
   // Planner based on ROS1 NavFn algorithm
-  std::unique_ptr<NavFn> planner_;
+  std::unique_ptr<AStar::Generator> planner_;
 
   // TF buffer
   std::shared_ptr<tf2_ros::Buffer> tf_;

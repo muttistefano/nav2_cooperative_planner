@@ -48,7 +48,7 @@ set(dependencies
 
 add_library(${library_name} SHARED
   src/cooperative_planner.cpp
-  src/cooperative.cpp
+  src/AStar.cpp
 )
 
 ament_target_dependencies(${library_name}

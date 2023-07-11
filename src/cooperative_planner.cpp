@@ -109,9 +109,7 @@ CoopPlanner::configure(
   _tf_listener = std::make_shared<tf2_ros::TransformListener>(*_tf_buffer);
 
   // Create a planner based on the new costmap size
-  planner_ = std::make_unique<NavFn>(
-    costmap_->getSizeInCellsX(),
-    costmap_->getSizeInCellsY());
+  planner_ = std::make_unique<AStar::Generator>();
 }
 
 void CoopPlanner::costmap_follower_call(const nav_msgs::msg::OccupancyGrid & msg)
@@ -179,13 +177,6 @@ nav_msgs::msg::Path CoopPlanner::createPlan(
             std::to_string(goal.pose.position.y) + ") was in lethal cost");
   }
 
-  // Update planner based on the new costmap size
-  if (isPlannerOutOfDate()) {
-    planner_->setNavArr(
-      costmap_->getSizeInCellsX(),
-      costmap_->getSizeInCellsY());
-  }
-
   nav_msgs::msg::Path path;
 
   // Corner case of the start(x,y) = goal(x,y)
@@ -209,19 +200,19 @@ nav_msgs::msg::Path CoopPlanner::createPlan(
     return path;
   }
 
-    char * cost_translation_table_ = new char[256];
+  char * cost_translation_table_ = new char[256];
 
-    // special values:
-    cost_translation_table_[0] = 0;  // NO obstacle
-    cost_translation_table_[253] = 99;  // INSCRIBED obstacle
-    cost_translation_table_[254] = 100;  // LETHAL obstacle
-    cost_translation_table_[255] = -1;  // UNKNOWN
+  // special values:
+  cost_translation_table_[0] = 0;  // NO obstacle
+  cost_translation_table_[253] = 99;  // INSCRIBED obstacle
+  cost_translation_table_[254] = 100;  // LETHAL obstacle
+  cost_translation_table_[255] = -1;  // UNKNOWN
 
-    // regular cost values scale the range 1 to 252 (inclusive) to fit
-    // into 1 to 98 (inclusive).
-    for (int i = 1; i < 253; i++) {
-      cost_translation_table_[i] = static_cast<char>(1 + (97 * (i - 1)) / 251);
-    }
+  // regular cost values scale the range 1 to 252 (inclusive) to fit
+  // into 1 to 98 (inclusive).
+  for (int i = 1; i < 253; i++) {
+    cost_translation_table_[i] = static_cast<char>(1 + (97 * (i - 1)) / 251);
+  }
 
   auto start_time = high_resolution_clock::now();
 
@@ -256,6 +247,13 @@ nav_msgs::msg::Path CoopPlanner::createPlan(
   int lead_y = costmap_->getSizeInCellsY();
   int foll_x = costmap_follower_->getSizeInCellsX(); 
   int foll_y = costmap_follower_->getSizeInCellsY();
+
+  // Update planner based on the new costmap size
+  if (isPlannerOutOfDate()) {
+    planner_->setWorldSize({
+      static_cast<int>(costmap_->getSizeInCellsX()),
+      static_cast<int>(costmap_->getSizeInCellsY()),4});
+  }
 
   RCLCPP_INFO_STREAM(this->logger_,"Bounds " << lead_x << " "<< lead_y << " "<< foll_x << " "<< foll_y << "\n");
 
@@ -328,6 +326,8 @@ nav_msgs::msg::Path CoopPlanner::createPlan(
             "Failed to create plan with tolerance of: " + std::to_string(tolerance_) );
   }
 
+  RCLCPP_INFO_STREAM(this->logger_,"plan lenght LIRE LIRE LI ERL: " << path.poses.size());
+  RCLCPP_INFO_STREAM(this->logger_,"returning");
 
   return path;
 }
@@ -336,8 +336,8 @@ bool
 CoopPlanner::isPlannerOutOfDate()
 {
   if (!planner_.get() ||
-    planner_->nx != static_cast<int>(costmap_->getSizeInCellsX()) ||
-    planner_->ny != static_cast<int>(costmap_->getSizeInCellsY()))
+    planner_->getWorldSize().x != (int)costmap_->getSizeInCellsX() ||
+    planner_->getWorldSize().y != (int)costmap_->getSizeInCellsY())
   {
     return true;
   }
@@ -351,11 +351,11 @@ CoopPlanner::makePlan(
   nav_msgs::msg::Path & plan)
 {
   // clear the plan, just in case
+  RCLCPP_INFO_STREAM(this->logger_,"making plan");
   plan.poses.clear();
 
   plan.header.stamp = clock_->now();
   plan.header.frame_id = global_frame_;
-
   // TODO(orduno): add checks for start and goal reference frame -- should be in global frame
 
   double wx = start.position.x;
@@ -367,213 +367,45 @@ CoopPlanner::makePlan(
 
   unsigned int mx, my;
   worldToMap(wx, wy, mx, my);
-
   // clear the starting cell within the costmap because we know it can't be an obstacle
   clearRobotCell(mx, my);
 
   std::unique_lock<nav2_costmap_2d::Costmap2D::mutex_t> lock(*(costmap_->getMutex()));
 
-  // make sure to resize the underlying array that Navfn uses
-  planner_->setNavArr(
-    costmap_->getSizeInCellsX(),
-    costmap_->getSizeInCellsY());
-
-  // planner_->setCostmap(costmap_->getCharMap(), true, allow_unknown_);
-  planner_->setCostmap(merged_map, true, allow_unknown_);
+  // planner_->setCostmap(merged_map);
 
   lock.unlock();
 
-  int map_start[2];
-  map_start[0] = mx;
-  map_start[1] = my;
-
+  planner_->setStart({(int)mx,(int)my,0});
+  RCLCPP_INFO_STREAM(this->logger_,"plan start : " << (int)mx << " " << (int)my);
   wx = goal.position.x;
   wy = goal.position.y;
 
   worldToMap(wx, wy, mx, my);
-  int map_goal[2];
-  map_goal[0] = mx;
-  map_goal[1] = my;
+  planner_->setGoal({(int)mx,(int)my,3});
+  RCLCPP_INFO_STREAM(this->logger_,"plan goal : " << (int)mx << " " << (int)my);
+  
+  AStar::CoordinateList plan_out = planner_->findPath();
 
-  // TODO(orduno): Explain why we are providing 'map_goal' to setStart().
-  //               Same for setGoal, seems reversed. Computing backwards?
+  //TODO tolerance
+  double pd = 0.5 *tolerance ;
+  tolerance = pd;
 
-  planner_->setStart(map_goal);
-  planner_->setGoal(map_start);
-  if (use_astar_) {
-    planner_->calcNavFnAstar();
-  } else {
-    planner_->calcNavFnDijkstra(true);
-  }
-
-  double resolution = costmap_->getResolution();
-  geometry_msgs::msg::Pose p, best_pose;
-
-  bool found_legal = false;
-
-  p = goal;
-  double potential = getPointPotential(p.position);
-  if (potential < POT_HIGH) {
-    // Goal is reachable by itself
-    best_pose = p;
-    found_legal = true;
-  } else {
-    // Goal is not reachable. Trying to find nearest to the goal
-    // reachable point within its tolerance region
-    double best_sdist = std::numeric_limits<double>::max();
-
-    p.position.y = goal.position.y - tolerance;
-    while (p.position.y <= goal.position.y + tolerance) {
-      p.position.x = goal.position.x - tolerance;
-      while (p.position.x <= goal.position.x + tolerance) {
-        potential = getPointPotential(p.position);
-        double sdist = squared_distance(p, goal);
-        if (potential < POT_HIGH && sdist < best_sdist) {
-          best_sdist = sdist;
-          best_pose = p;
-          found_legal = true;
-        }
-        p.position.x += resolution;
-      }
-      p.position.y += resolution;
-    }
-  }
-
-  if (found_legal) {
-    // extract the plan
-    if (getPlanFromPotential(best_pose, plan)) {
-      smoothApproachToGoal(best_pose, plan);
-
-      // If use_final_approach_orientation=true, interpolate the last pose orientation from the
-      // previous pose to set the orientation to the 'final approach' orientation of the robot so
-      // it does not rotate.
-      // And deal with corner case of plan of length 1
-      if (use_final_approach_orientation_) {
-        size_t plan_size = plan.poses.size();
-        if (plan_size == 1) {
-          plan.poses.back().pose.orientation = start.orientation;
-        } else if (plan_size > 1) {
-          double dx, dy, theta;
-          auto last_pose = plan.poses.back().pose.position;
-          auto approach_pose = plan.poses[plan_size - 2].pose.position;
-          // Deal with the case of NavFn producing a path with two equal last poses
-          if (std::abs(last_pose.x - approach_pose.x) < 0.0001 &&
-            std::abs(last_pose.y - approach_pose.y) < 0.0001 && plan_size > 2)
-          {
-            approach_pose = plan.poses[plan_size - 3].pose.position;
-          }
-          dx = last_pose.x - approach_pose.x;
-          dy = last_pose.y - approach_pose.y;
-          theta = atan2(dy, dx);
-          plan.poses.back().pose.orientation =
-            nav2_util::geometry_utils::orientationAroundZAxis(theta);
-        }
-      }
-    } else {
-      RCLCPP_ERROR(
-        logger_,
-        "Failed to create a plan from potential when a legal"
-        " potential was found. This shouldn't happen.");
-    }
-  }
-
-  return !plan.poses.empty();
-}
-
-void
-CoopPlanner::smoothApproachToGoal(
-  const geometry_msgs::msg::Pose & goal,
-  nav_msgs::msg::Path & plan)
-{
-  // Replace the last pose of the computed path if it's actually further away
-  // to the second to last pose than the goal pose.
-  if (plan.poses.size() >= 2) {
-    auto second_to_last_pose = plan.poses.end()[-2];
-    auto last_pose = plan.poses.back();
-    if (
-      squared_distance(last_pose.pose, second_to_last_pose.pose) >
-      squared_distance(goal, second_to_last_pose.pose))
-    {
-      plan.poses.back().pose = goal;
-      return;
-    }
-  }
-  geometry_msgs::msg::PoseStamped goal_copy;
-  goal_copy.pose = goal;
-  plan.poses.push_back(goal_copy);
-}
-
-bool
-CoopPlanner::getPlanFromPotential(
-  const geometry_msgs::msg::Pose & goal,
-  nav_msgs::msg::Path & plan)
-{
-  // clear the plan, just in case
-  plan.poses.clear();
-
-  // Goal should be in global frame
-  double wx = goal.position.x;
-  double wy = goal.position.y;
-
-  // the potential has already been computed, so we won't update our copy of the costmap
-  unsigned int mx, my;
-  worldToMap(wx, wy, mx, my);
-
-  int map_goal[2];
-  map_goal[0] = mx;
-  map_goal[1] = my;
-
-  planner_->setStart(map_goal);
-
-  const int & max_cycles = (costmap_->getSizeInCellsX() >= costmap_->getSizeInCellsY()) ?
-    (costmap_->getSizeInCellsX() * 4) : (costmap_->getSizeInCellsY() * 4);
-
-  int path_len = planner_->calcPath(max_cycles);
-  if (path_len == 0) {
-    return false;
-  }
-
-  auto cost = planner_->getLastPathCost();
-  RCLCPP_DEBUG(
-    logger_,
-    "Path found, %d steps, %f cost\n", path_len, cost);
-
-  // extract the plan
-  float * x = planner_->getPathX();
-  float * y = planner_->getPathY();
-  int len = planner_->getPathLen();
-
-  for (int i = len - 1; i >= 0; --i) {
-    // convert the plan to world coordinates
+  RCLCPP_INFO_STREAM(this->logger_,"plan lenght: " << plan_out.size());
+  geometry_msgs::msg::PoseStamped pt;
+  for (auto& pt_out: plan_out)
+  {
     double world_x, world_y;
-    mapToWorld(x[i], y[i], world_x, world_y);
-
-    geometry_msgs::msg::PoseStamped pose;
-    pose.pose.position.x = world_x;
-    pose.pose.position.y = world_y;
-    pose.pose.position.z = 0.0;
-    pose.pose.orientation.x = 0.0;
-    pose.pose.orientation.y = 0.0;
-    pose.pose.orientation.z = 0.0;
-    pose.pose.orientation.w = 1.0;
-    plan.poses.push_back(pose);
+    mapToWorld(pt_out.x, pt_out.y, world_x, world_y);
+    pt.pose.position.x = world_x;
+    pt.pose.position.y = world_y;
+    pt.pose.orientation.w = 1.0;
+    plan.poses.push_back(pt);
   }
 
+  RCLCPP_INFO_STREAM(this->logger_,"returning from making plan");
   return !plan.poses.empty();
 }
-
-double
-CoopPlanner::getPointPotential(const geometry_msgs::msg::Point & world_point)
-{
-  unsigned int mx, my;
-  if (!worldToMap(world_point.x, world_point.y, mx, my)) {
-    return std::numeric_limits<double>::max();
-  }
-
-  unsigned int index = my * planner_->nx + mx;
-  return planner_->potarr[index];
-}
-
 
 bool
 CoopPlanner::worldToMap(double wx, double wy, unsigned int & mx, unsigned int & my)
