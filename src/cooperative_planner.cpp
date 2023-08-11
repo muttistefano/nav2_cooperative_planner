@@ -372,17 +372,20 @@ CoopPlanner::makePlan(
 
   std::unique_lock<nav2_costmap_2d::Costmap2D::mutex_t> lock(*(costmap_->getMutex()));
 
-  // planner_->setCostmap(merged_map);
+  planner_->setCostmap(merged_map);
 
   lock.unlock();
 
-  planner_->setStart({(int)mx,(int)my,0});
+  // planner_->setStart({(int)mx,(int)my,0});
+  planner_->setGoal({(int)mx,(int)my,0});
   RCLCPP_INFO_STREAM(this->logger_,"plan start : " << (int)mx << " " << (int)my);
+
   wx = goal.position.x;
   wy = goal.position.y;
 
   worldToMap(wx, wy, mx, my);
-  planner_->setGoal({(int)mx,(int)my,3});
+  // planner_->setGoal({(int)mx,(int)my,3});
+  planner_->setStart({(int)mx,(int)my,0});
   RCLCPP_INFO_STREAM(this->logger_,"plan goal : " << (int)mx << " " << (int)my);
   
   AStar::CoordinateList plan_out = planner_->findPath();
@@ -399,6 +402,7 @@ CoopPlanner::makePlan(
     mapToWorld(pt_out.x, pt_out.y, world_x, world_y);
     pt.pose.position.x = world_x;
     pt.pose.position.y = world_y;
+    pt.pose.position.0 = 0;
     pt.pose.orientation.w = 1.0;
     plan.poses.push_back(pt);
   }

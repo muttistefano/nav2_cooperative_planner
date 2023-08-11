@@ -207,7 +207,7 @@ bool AStar::Generator::setCostmap(int * costmap)
         {
             if(costmap[y*this->worldSize.x + x] > 200)
             {
-                this->addCollision({x,y,1});
+                this->addCollision({y,x,1});
             }
         }
     }
