@@ -252,7 +252,7 @@ nav_msgs::msg::Path CoopPlanner::createPlan(
   if (isPlannerOutOfDate()) {
     planner_->setWorldSize({
       static_cast<int>(costmap_->getSizeInCellsX()),
-      static_cast<int>(costmap_->getSizeInCellsY()),4});
+      static_cast<int>(costmap_->getSizeInCellsY()),1});
   }
 
   RCLCPP_INFO_STREAM(this->logger_,"Bounds " << lead_x << " "<< lead_y << " "<< foll_x << " "<< foll_y << "\n");
@@ -319,7 +319,7 @@ nav_msgs::msg::Path CoopPlanner::createPlan(
 
   auto stop_time = high_resolution_clock::now();
   auto duration = duration_cast<microseconds>(stop_time - start_time);
-  RCLCPP_INFO_STREAM(this->logger_ ,"Time taken: " << duration.count());
+  RCLCPP_INFO_STREAM(this->logger_ ,"Time taken to merge maps: " << duration.count());
 
   if (!makePlan(start.pose, goal.pose, tolerance_, path)) {
     throw nav2_core::NoValidPathCouldBeFound(
@@ -356,7 +356,6 @@ CoopPlanner::makePlan(
 
   plan.header.stamp = clock_->now();
   plan.header.frame_id = global_frame_;
-  // TODO(orduno): add checks for start and goal reference frame -- should be in global frame
 
   double wx = start.position.x;
   double wy = start.position.y;
@@ -376,19 +375,21 @@ CoopPlanner::makePlan(
 
   lock.unlock();
 
-  // planner_->setStart({(int)mx,(int)my,0});
-  planner_->setGoal({(int)mx,(int)my,0});
+  planner_->setStart({(int)mx,(int)my,0});
   RCLCPP_INFO_STREAM(this->logger_,"plan start : " << (int)mx << " " << (int)my);
 
   wx = goal.position.x;
   wy = goal.position.y;
 
   worldToMap(wx, wy, mx, my);
-  // planner_->setGoal({(int)mx,(int)my,3});
-  planner_->setStart({(int)mx,(int)my,0});
+  planner_->setGoal({(int)mx,(int)my,0});
   RCLCPP_INFO_STREAM(this->logger_,"plan goal : " << (int)mx << " " << (int)my);
   
+  auto saa = high_resolution_clock::now();
   AStar::CoordinateList plan_out = planner_->findPath();
+  auto sae = high_resolution_clock::now();
+  auto drr = duration_cast<microseconds>(sae - saa);
+  RCLCPP_INFO_STREAM(this->logger_ ,"Time taken to plan: " << drr.count());
 
   //TODO tolerance
   double pd = 0.5 *tolerance ;
@@ -402,7 +403,7 @@ CoopPlanner::makePlan(
     mapToWorld(pt_out.x, pt_out.y, world_x, world_y);
     pt.pose.position.x = world_x;
     pt.pose.position.y = world_y;
-    pt.pose.position.0 = 0;
+    pt.pose.position.z = 0;
     pt.pose.orientation.w = 1.0;
     plan.poses.push_back(pt);
   }

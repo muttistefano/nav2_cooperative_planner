@@ -39,9 +39,14 @@ AStar::Generator::Generator()
     };
     direction_costs = {
         14,10,14,10,14,10,14,10,
-        17,14,17,14,17,14,17,14,10,
-        17,14,17,14,17,14,17,14,10
+        14,10,14,10,14,10,14,10,10,
+        14,10,14,10,14,10,14,10,10
     };
+    // direction_costs = {
+    //     14,10,14,10,14,10,14,10,
+    //     17,14,17,14,17,14,17,14,10,
+    //     17,14,17,14,17,14,17,14,10
+    // };
 }
 
 void AStar::Generator::setWorldSize(Vec2i worldSize_)
@@ -81,8 +86,8 @@ AStar::CoordinateList AStar::Generator::findPath()
 {
     Node *current = nullptr;
     NodeSet openSet, closedSet;
-    openSet.reserve(10000);
-    closedSet.reserve(10000);
+    // openSet.reserve(10000);
+    // closedSet.reserve(10000);
     openSet.push_back(new Node(this->source_pt));
 
     while (!openSet.empty()) {
@@ -104,15 +109,18 @@ AStar::CoordinateList AStar::Generator::findPath()
         closedSet.push_back(current);
         openSet.erase(current_it);
 
-        for (uint i = 0; i < 27; ++i) {
+        for (uint i = 0; i < 27; i++) {
             Vec2i newCoordinates(current->coordinates + direction[i]);
             if (detectCollision(newCoordinates) ||
                 findNodeOnList(closedSet, newCoordinates)) {
+                // std::cout << "cll " << i << " " << std::flush;
+
                 continue;
             }
             
             // uint totalCost = current->G + ((i < 8) ? 10 : 14);
             uint totalCost = current->G + direction_costs[i];
+            // std::cout << "MEGAPD " << direction_costs[i] << "  " << i << "\n" << std::flush;
             // std::cout << totalCost << "\n";
 
             Node *successor = findNodeOnList(openSet, newCoordinates);
@@ -179,7 +187,7 @@ AStar::uint AStar::Heuristic::euclidean(Vec2i source_, Vec2i target_)
 {
     auto delta = std::move(getDelta(source_, target_));
     //TODO fix
-    return static_cast<uint>(20 * sqrt(pow(delta.x, 2) + pow(delta.y, 2) + pow(delta.z, 2)));
+    return static_cast<uint>(100 * sqrt(pow(delta.x, 2) + pow(delta.y, 2) + pow(delta.z, 2)));
 }
 
 AStar::uint AStar::Heuristic::octagonal(Vec2i source_, Vec2i target_)
@@ -205,9 +213,10 @@ bool AStar::Generator::setCostmap(int * costmap)
     {
         for(int y=0;y<this->worldSize.y;y++)
         {
-            if(costmap[y*this->worldSize.x + x] > 200)
+            if(costmap[y*this->worldSize.x + x] > 10)
             {
-                this->addCollision({y,x,1});
+                this->addCollision({x,y,0});
+                
             }
         }
     }

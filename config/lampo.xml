@@ -1,0 +1,64 @@
+<?xml version="1.0"?>
+<root main_tree_to_execute="MainTree">
+    <!-- ////////// -->
+    <BehaviorTree ID="MainTree">
+        <Control ID="RecoveryNode" name="NavigateRecovery" number_of_retries="6">
+            <Control ID="PipelineSequence" name="NavigateWithReplanning">
+                <Decorator ID="RateController" hz="1.0">
+                    <Control ID="RecoveryNode" name="ComputePathToPose" number_of_retries="1">
+                        <Action ID="ComputePathToPose" error_code_id="{compute_path_error_code}" goal="{goal}" path="{path}" planner_id="GridBased" server_name="" server_timeout="" start=""/>
+                        <Sequence>
+                            <Condition ID="WouldAPlannerRecoveryHelp" error_code="{compute_path_error_code}"/>
+                            <Action ID="ClearEntireCostmap" name="ClearGlobalCostmap-Context" server_timeout="" service_name="global_costmap/clear_entirely_global_costmap"/>
+                        </Sequence>
+                    </Control>
+                </Decorator>
+            </Control>
+            <Sequence>
+                <Fallback>
+                    <Condition ID="WouldAControllerRecoveryHelp" error_code="{follow_path_error_code}"/>
+                    <Condition ID="WouldAPlannerRecoveryHelp" error_code="{compute_path_error_code}"/>
+                </Fallback>
+            </Sequence>
+        </Control>
+    </BehaviorTree>
+    <!-- ////////// -->
+    <TreeNodesModel>
+        <Action ID="ClearEntireCostmap">
+            <input_port name="server_timeout">Server timeout</input_port>
+            <input_port name="service_name">Service name</input_port>
+        </Action>
+        <Action ID="ComputePathToPose">
+            <output_port name="error_code_id">&quot;Compute path to pose error code&quot;</output_port>
+            <input_port name="goal">Destination to plan to</input_port>
+            <output_port name="path">Path created by ComputePathToPose node</output_port>
+            <input_port name="planner_id">Mapped name to the planner plugin type to use</input_port>
+            <input_port name="server_name">Server name</input_port>
+            <input_port name="server_timeout">Server timeout</input_port>
+            <input_port name="start">Start pose of the path if overriding current robot pose</input_port>
+        </Action>
+        <Action ID="FollowPath">
+            <input_port default="FollowPath" name="controller_id"/>
+            <output_port name="error_code_id">Follow Path error code</output_port>
+            <input_port name="goal_checker_id">Goal checker</input_port>
+            <input_port name="path">Path to follow</input_port>
+            <input_port name="progress_checker_id">Progress checker</input_port>
+            <input_port name="server_timeout">Server timeout</input_port>
+            <input_port name="service_name">Service name</input_port>
+        </Action>
+        <Control ID="PipelineSequence"/>
+        <Decorator ID="RateController">
+            <input_port name="hz">Rate</input_port>
+        </Decorator>
+        <Control ID="RecoveryNode">
+            <input_port name="number_of_retries">Number of retries</input_port>
+        </Control>
+        <Condition ID="WouldAControllerRecoveryHelp">
+            <input_port name="error_code">Error code</input_port>
+        </Condition>
+        <Condition ID="WouldAPlannerRecoveryHelp">
+            <input_port name="error_code">Error code</input_port>
+        </Condition>
+    </TreeNodesModel>
+    <!-- ////////// -->
+</root>
