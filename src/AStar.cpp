@@ -14,7 +14,7 @@ AStar::Vec2i operator + (const AStar::Vec2i& left_, const AStar::Vec2i& right_)
     return{ left_.x + right_.x, left_.y + right_.y,left_.z + right_.z };
 }
 
-AStar::Node::Node(Vec2i coordinates_, Node *parent_)
+AStar::Node::Node(Vec2i coordinates_, std::shared_ptr<Node> parent_)
 {
     parent = parent_;
     coordinates = coordinates_;
@@ -22,7 +22,7 @@ AStar::Node::Node(Vec2i coordinates_, Node *parent_)
     H = 0;
 }
 
-AStar::uint AStar::Node::getScore()
+AStar::uint AStar::Node::getScore() const
 {
     return G + H;
 }
@@ -31,7 +31,7 @@ void AStar::Generator::reset(){};
 
 AStar::Generator::Generator()
 {
-    setHeuristic(&Heuristic::euclidean);
+    setHeuristic(&Heuristic::manhattan);
     direction = {
         { 1, 1, 0 }, { 1, 0, 0 }, { 1,-1, 0 }, { 0,-1, 0 },{-1,-1, 0 }, {-1, 0, 0 }, {-1, 1, 0 }, { 0, 1, 0 },
         { 1, 1, 1 }, { 1, 0, 1 }, { 1,-1, 1 }, { 0,-1, 1 },{-1,-1, 1 }, {-1, 0, 1 }, {-1, 1, 1 }, { 0, 1, 1 }, { 0, 0, 1 },
@@ -52,6 +52,9 @@ AStar::Generator::Generator()
 void AStar::Generator::setWorldSize(Vec2i worldSize_)
 {
     worldSize = worldSize_;
+    //TODO is ok ?
+    auto maxcoll = static_cast<std::size_t>(worldSize_.x * worldSize_.y * worldSize_.z);
+    walls.reserve(maxcoll);
 }
 
 AStar::Vec2i AStar::Generator::getWorldSize()
@@ -84,11 +87,11 @@ void AStar::Generator::clearCollisions()
 
 AStar::CoordinateList AStar::Generator::findPath()
 {
-    Node *current = nullptr;
+    std::shared_ptr<Node> current = nullptr;
     NodeSet openSet, closedSet;
     // openSet.reserve(10000);
     // closedSet.reserve(10000);
-    openSet.push_back(new Node(this->source_pt));
+    openSet.push_back(std::make_shared<Node>(this->source_pt));
 
     while (!openSet.empty()) {
         auto current_it = openSet.begin();
@@ -123,9 +126,9 @@ AStar::CoordinateList AStar::Generator::findPath()
             // std::cout << "MEGAPD " << direction_costs[i] << "  " << i << "\n" << std::flush;
             // std::cout << totalCost << "\n";
 
-            Node *successor = findNodeOnList(openSet, newCoordinates);
+            std::shared_ptr<Node> successor = findNodeOnList(openSet, newCoordinates);
             if (successor == nullptr) {
-                successor = new Node(newCoordinates, current);
+                successor = std::make_shared<Node>(newCoordinates, current);
                 successor->G = totalCost;
                 successor->H = heuristic(successor->coordinates, goal_pt);
                 openSet.push_back(successor);
@@ -149,7 +152,7 @@ AStar::CoordinateList AStar::Generator::findPath()
     return path;
 }
 
-AStar::Node* AStar::Generator::findNodeOnList(NodeSet& nodes_, Vec2i coordinates_)
+std::shared_ptr<AStar::Node> AStar::Generator::findNodeOnList(NodeSet& nodes_, Vec2i coordinates_)
 {
     for (auto node : nodes_) {
         if (node->coordinates == coordinates_) {
@@ -162,7 +165,7 @@ AStar::Node* AStar::Generator::findNodeOnList(NodeSet& nodes_, Vec2i coordinates
 void AStar::Generator::releaseNodes(NodeSet& nodes_)
 {
     for (auto it = nodes_.begin(); it != nodes_.end();) {
-        delete *it;
+        // delete *it;
         it = nodes_.erase(it);
     }
 }
@@ -187,7 +190,7 @@ AStar::uint AStar::Heuristic::euclidean(Vec2i source_, Vec2i target_)
 {
     auto delta = std::move(getDelta(source_, target_));
     //TODO fix
-    return static_cast<uint>(100 * sqrt(pow(delta.x, 2) + pow(delta.y, 2) + pow(delta.z, 2)));
+    return static_cast<uint>(14 * sqrt(pow(delta.x, 2) + pow(delta.y, 2) + pow(delta.z, 2)));
 }
 
 AStar::uint AStar::Heuristic::octagonal(Vec2i source_, Vec2i target_)
@@ -195,6 +198,12 @@ AStar::uint AStar::Heuristic::octagonal(Vec2i source_, Vec2i target_)
     auto delta = std::move(getDelta(source_, target_));
     return 10 * (delta.x + delta.y) + (-6) * std::min(delta.x, delta.y);
     //TODO fix this
+}
+
+AStar::uint AStar::Heuristic::manhattan(Vec2i source_, Vec2i target_)
+{
+    auto delta = std::move(getDelta(source_, target_));
+    return static_cast<uint>(14 * (delta.x + delta.y + delta.z));
 }
 
 void AStar::Generator::setStart(Vec2i source_)
@@ -207,7 +216,7 @@ void AStar::Generator::setGoal(Vec2i target_)
     this->goal_pt = target_;
 }
 
-bool AStar::Generator::setCostmap(int * costmap)
+bool AStar::Generator::setCostmap(std::vector<int> costmap)
 {
     for(int x=0;x<this->worldSize.x;x++)
     {
@@ -222,3 +231,4 @@ bool AStar::Generator::setCostmap(int * costmap)
     }
     return true;
 }
+
