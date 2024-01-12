@@ -322,7 +322,7 @@ nav_msgs::msg::Path CoopPlanner::createPlan(
             "Failed to create plan with tolerance of: " + std::to_string(tolerance_) );
   }
 
-  RCLCPP_INFO_STREAM(this->logger_,"plan lenght LIRE LIRE LI ERL: " << path.poses.size());
+  RCLCPP_INFO_STREAM(this->logger_,"plan lenght : " << path.poses.size());
   RCLCPP_INFO_STREAM(this->logger_,"returning \n \n \n \n \n \n ");
 
   return path;
@@ -394,16 +394,35 @@ CoopPlanner::makePlan(
   tolerance = pd;
 
   
-  geometry_msgs::msg::PoseStamped pt;
-  for (auto& pt_out: plan_out)
-  {
+  
+  // for (auto& pt_out: plan_out)
+  // {
+  //   double world_x, world_y;
+    // mapToWorld(pt_out.x, pt_out.y, world_x, world_y);
+  //   geometry_msgs::msg::PoseStamped pt;
+  //   pt.pose.position.x = world_x;
+  //   pt.pose.position.y = world_y;
+  //   pt.pose.position.z = 0;
+  //   pt.pose.orientation.w = 1.0;
+  //   plan.poses.push_back(pt);
+  // }
+
+  int len = plan_out.size();
+
+  for (int i = len - 1; i >= 0; --i) {
+    // convert the plan to world coordinates
     double world_x, world_y;
-    mapToWorld(pt_out.x, pt_out.y, world_x, world_y);
-    pt.pose.position.x = world_x;
-    pt.pose.position.y = world_y;
-    pt.pose.position.z = 0;
-    pt.pose.orientation.w = 1.0;
-    plan.poses.push_back(pt);
+    mapToWorld(plan_out[i].x, plan_out[i].y, world_x, world_y);
+
+    geometry_msgs::msg::PoseStamped pose;
+    pose.pose.position.x = world_x;
+    pose.pose.position.y = world_y;
+    pose.pose.position.z = 0.0;
+    pose.pose.orientation.x = 0.0;
+    pose.pose.orientation.y = 0.0;
+    pose.pose.orientation.z = 0.0;
+    pose.pose.orientation.w = 1.0;
+    plan.poses.push_back(pose);
   }
 
   if (use_final_approach_orientation_) {
