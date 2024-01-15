@@ -11,6 +11,8 @@
 #include <set>
 #include <iostream>
 #include <chrono>
+#include <memory>
+
 
 
 namespace AStar
@@ -35,18 +37,18 @@ namespace AStar
     {
         uint G, H;
         Vec2i coordinates;
-        Node *parent;
+        std::shared_ptr<Node> parent;
 
-        Node(Vec2i coord_, Node *parent_ = nullptr);
-        uint getScore();
+        Node(Vec2i coord_, std::shared_ptr<Node> parent_ = nullptr);
+        uint getScore() const;
     };
 
-    using NodeSet = std::vector<Node*>;
+    using NodeSet = std::vector<std::shared_ptr<Node>>;
 
     class Generator
     {
         bool detectCollision(Vec2i coordinates_);
-        Node* findNodeOnList(NodeSet& nodes_, Vec2i coordinates_);
+        std::shared_ptr<Node> findNodeOnList(NodeSet& nodes_, Vec2i coordinates_);
         void releaseNodes(NodeSet& nodes_);
 
     public:
@@ -56,20 +58,25 @@ namespace AStar
         void setHeuristic(HeuristicFunction heuristic_);
         CoordinateList findPath();
         void setStart(Vec2i source_);
+        Vec2i getStart() const {return source_pt;};
         void setGoal(Vec2i target_);
+        Vec2i getGoal() const {return goal_pt;};
         void addCollision(Vec2i coordinates_);
         void removeCollision(Vec2i coordinates_);
         void clearCollisions();
         void reset();
-        bool setCostmap(int * costmap);
+        bool setCostmap(std::vector<int> costmap);
 
     private:
         HeuristicFunction heuristic;
-        CoordinateList direction, walls;
+        CoordinateList direction;
+        CoordinateList walls;
         Vec2i worldSize;
         std::vector<uint> direction_costs;
         Vec2i source_pt;
         Vec2i goal_pt;
+
+
     };
 
     class Heuristic
@@ -79,6 +86,7 @@ namespace AStar
     public:
         static uint euclidean(Vec2i source_, Vec2i target_);
         static uint octagonal(Vec2i source_, Vec2i target_);
+        static uint manhattan(Vec2i source_, Vec2i target_);
     };
 }
 
