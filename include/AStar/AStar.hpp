@@ -61,7 +61,6 @@ namespace AStar
         Vec2i getStart() const {return source_pt;};
         void setGoal(Vec2i target_);
         Vec2i getGoal() const {return goal_pt;};
-        void addCollision(Vec2i coordinates_);
         void removeCollision(Vec2i coordinates_);
         void clearCollisions();
         void reset();

@@ -43,6 +43,14 @@ using nav2_util::declare_parameter_if_not_declared;
 using rcl_interfaces::msg::ParameterType;
 using std::placeholders::_1;
 
+double ToEulerAngles(const double z,const double w) {
+
+    // yaw (z-axis rotation)
+    double siny_cosp = 2 * (w * z);
+    double cosy_cosp = 1 - 2 * (z * z);
+    return std::atan2(siny_cosp, cosy_cosp);
+}
+
 namespace nav2_cooperative_planner
 {
 
@@ -238,6 +246,8 @@ nav_msgs::msg::Path CoopPlanner::createPlan(
   tf2::fromMsg(_tf_map_foll_, map_to_foll);
   tf2::fromMsg(_tf_map_lead_, map_to_lead);
 
+  // const int    discretization = 20;
+  // const double angle_disc     = 0.1;
 
   //Get map size
   int lead_x = costmap_->getSizeInCellsX(); 
@@ -249,7 +259,8 @@ nav_msgs::msg::Path CoopPlanner::createPlan(
   if (isPlannerOutOfDate()) {
     planner_->setWorldSize({
       static_cast<int>(costmap_->getSizeInCellsX()),
-      static_cast<int>(costmap_->getSizeInCellsY()),1});
+      static_cast<int>(costmap_->getSizeInCellsY()),
+      (2*discretization + 1)});
       RCLCPP_WARN_STREAM(this->logger_,"Planner out of date \n");
 
   }
@@ -263,37 +274,48 @@ nav_msgs::msg::Path CoopPlanner::createPlan(
   const unsigned char * lead_map =  costmap_->getCharMap();
   const unsigned char * foll_map =  costmap_follower_->getCharMap();
 
-  // merged_map =  new int[lead_x*lead_y]();
-  // std::vector<int> merged_map;
-  // qualcosa non viene pulito prova a fare u plan semplice 100 volte di fila e vedi se il tempo cresce
-  merged_map.resize(static_cast<std::size_t>(lead_x*lead_y));
+
+  merged_map.resize(static_cast<std::size_t>(lead_x*lead_y*(2*discretization + 1)));
   std::fill(merged_map.begin(), merged_map.end(), 0);
-  
-  RCLCPP_INFO_STREAM(this->logger_,"Merged map size ->  " << merged_map.size() << ":"<< lead_x*lead_y << "\n");
 
   double resolution = costmap_->getResolution();
-  auto shift_x = int((map_to_lead.getOrigin().x() - map_to_foll.getOrigin().x())/resolution);
-  auto shift_y = int((map_to_lead.getOrigin().y() - map_to_foll.getOrigin().y())/resolution);
+  // auto shift_xasd = int((map_to_foll.getOrigin().x() - map_to_lead.getOrigin().x())/resolution);
+  // auto shift_yasd = int((map_to_foll.getOrigin().y() - map_to_lead.getOrigin().y())/resolution);
+  // RCLCPP_INFO_STREAM(this->logger_,"shift_xasd ->  " << shift_xasd << "\n");
+  // RCLCPP_INFO_STREAM(this->logger_,"shift_yasd ->  " << shift_yasd << "\n");
+  auto dist_lf = sqrt(pow(map_to_lead.getOrigin().x() - map_to_foll.getOrigin().x(),2) + pow(map_to_lead.getOrigin().y() - map_to_foll.getOrigin().y(),2));
+  this->angl_lf = atan2(map_to_foll.getOrigin().y() - map_to_lead.getOrigin().y(),map_to_foll.getOrigin().x() - map_to_lead.getOrigin().x());
+
+  // RCLCPP_INFO_STREAM(this->logger_,"X ->  " << map_to_foll.getOrigin().x() - map_to_lead.getOrigin().x() << "\n");
+  // RCLCPP_INFO_STREAM(this->logger_,"Y ->  " << map_to_foll.getOrigin().y() - map_to_lead.getOrigin().y() << "\n");
+  // RCLCPP_INFO_STREAM(this->logger_,"dist_lf ->  " << dist_lf << "\n");
+  RCLCPP_INFO_STREAM(this->logger_,"angl_lf ->  " << angl_lf << "\n");
 
   // TODO is slower with omp ?? fix
   // #pragma omp parallel for
-  for(int x=0;x<lead_x;x++)
+  
+  for(int disc = (-1 * discretization), cnt = 0 ; disc < (discretization + 1) ; disc++ , cnt++)
   {
-    for(int y=0;y<lead_y;y++)
+    auto shift_x = int(cos((static_cast<double>(disc) * angle_disc) + angl_lf) * dist_lf/resolution);
+    auto shift_y = int(sin((static_cast<double>(disc) * angle_disc) + angl_lf) * dist_lf/resolution);
+
+    for(int x=0;x<lead_x;x++)
     {
-      int idx = y * lead_x + x;
-      merged_map[idx] = static_cast<int>(lead_map[idx]/2);
-      int idx_2_x = ((x-shift_x) > 0) && ((x-shift_x) < lead_x) ?  (x-shift_x)  : 0 ;
-      int idx_2_y = ((y-shift_y) > 0) && ((y-shift_y) < lead_y) ?  (y-shift_y)  : 0 ;
-      // //TODO fix is not 0
-      if ((idx_2_x==0) || (idx_2_y==0))
+      for(int y=0;y<lead_y;y++)
       {
-        continue;
+        int idx = y * lead_x + x;
+        int idx_2_x = ((x+shift_x) > 0) && ((x+shift_x) < lead_x) ?  (x+shift_x)  : 0 ;
+        int idx_2_y = ((y+shift_y) > 0) && ((y+shift_y) < lead_y) ?  (y+shift_y)  : 0 ;
+        // //TODO fix is not 0
+        if ((idx_2_x==0) || (idx_2_y==0))
+        {
+          continue;
+        }
+
+        int idx_2 = idx_2_y * lead_x + idx_2_x;
+        merged_map[idx + (cnt * lead_x * lead_y)] = std::max(lead_map[idx],(foll_map[idx_2]));
+
       }
-
-      int idx_2 = idx_2_y * lead_x + idx_2_x;
-      merged_map[idx] = std::max(merged_map[idx],(static_cast<int>(foll_map[idx_2]/2)));
-
     }
   }
 
@@ -306,9 +328,9 @@ nav_msgs::msg::Path CoopPlanner::createPlan(
   costmap_raw_->header.frame_id = global_frame_;
 
   costmap_raw_->data.resize(lead_x*lead_y);
-  for(int ix = 0;ix <lead_x*lead_y;ix++)
+  for(int ix = (lead_x*lead_y) * discretization , cc = 0 ; ix < (lead_x*lead_y) * (discretization + 1) ; ix++ , cc++)
   {
-    costmap_raw_->data.at(ix) = (cost_translation_table_[merged_map[ix]]);
+    costmap_raw_->data.at(cc) = (cost_translation_table_[merged_map[ix]]);
   }
   
   map_publisher_->publish(*costmap_raw_);
@@ -363,23 +385,38 @@ CoopPlanner::makePlan(
   unsigned int mx, my;
   worldToMap(wx, wy, mx, my);
   // clear the starting cell within the costmap because we know it can't be an obstacle
-  clearRobotCell(mx, my);
 
   std::unique_lock<nav2_costmap_2d::Costmap2D::mutex_t> lock(*(costmap_->getMutex()));
 
+  auto csaa = high_resolution_clock::now();
   planner_->setCostmap(merged_map);
+  auto csae = high_resolution_clock::now();
+  auto cdrr = duration_cast<microseconds>(csae - csaa);
+  RCLCPP_INFO_STREAM(this->logger_ ,"Time taken to set costmap: " << cdrr.count());
 
   lock.unlock();
 
-  planner_->setStart({(int)mx,(int)my,0});
-  RCLCPP_INFO_STREAM(this->logger_,"plan start : " << (int)mx << " " << (int)my);
+  planner_->setStart({(int)mx,(int)my,discretization});
+  RCLCPP_INFO_STREAM(this->logger_,"plan start : " << (int)mx << " " << (int)my << " " << discretization);
 
   wx = goal.position.x;
   wy = goal.position.y;
 
+  auto goal_yaw   = ToEulerAngles(goal.orientation.z,goal.orientation.w);
+  auto map_lead_a = ToEulerAngles(_tf_map_lead_.transform.rotation.z,_tf_map_lead_.transform.rotation.w);
+  // auto z_goal     = (- map_lead_a + goal_yaw)/angle_disc;
+  auto z_goal     = (- map_lead_a + goal_yaw);
+  if(z_goal >  M_PI) {z_goal = z_goal - 2 * M_PI;}
+  if(z_goal < -M_PI) {z_goal = z_goal + 2 * M_PI;}
+  auto z_goal_disc = static_cast<int>(z_goal/angle_disc);
+  // RCLCPP_INFO_STREAM(this->logger_,"m_goal ->  " << map_lead_a << "\n");
+  // RCLCPP_INFO_STREAM(this->logger_,"goal_yaw ->  " << goal_yaw << "\n");
+  // RCLCPP_INFO_STREAM(this->logger_,"z_goal ->  " << z_goal << "\n");
+  RCLCPP_INFO_STREAM(this->logger_,"z_goal_disc ->  " << z_goal_disc << "\n");
+
   worldToMap(wx, wy, mx, my);
-  planner_->setGoal({(int)mx,(int)my,0});
-  RCLCPP_INFO_STREAM(this->logger_,"plan goal : " << (int)mx << " " << (int)my);
+  planner_->setGoal({(int)mx,(int)my,discretization - z_goal_disc});
+  RCLCPP_INFO_STREAM(this->logger_,"plan goal : " << (int)mx << " " << (int)my << " "  << discretization - z_goal_disc);
   
   auto saa = high_resolution_clock::now();
   AStar::CoordinateList plan_out = planner_->findPath();
@@ -396,10 +433,9 @@ CoopPlanner::makePlan(
   int len = plan_out.size();
 
   for (int i = len - 1; i >= 0; --i) {
-    // convert the plan to world coordinates
     double world_x, world_y;
     mapToWorld(plan_out[i].x, plan_out[i].y, world_x, world_y);
-
+    RCLCPP_INFO_STREAM(this->logger_ ,"Path : " << plan_out[i].x << " " << plan_out[i].y << " " << plan_out[i].z << "\n");
     geometry_msgs::msg::PoseStamped pose;
     pose.pose.position.x = world_x;
     pose.pose.position.y = world_y;
@@ -471,13 +507,6 @@ CoopPlanner::mapToWorld(double mx, double my, double & wx, double & wy)
   wy = costmap_->getOriginY() + my * costmap_->getResolution();
 }
 
-void
-CoopPlanner::clearRobotCell(unsigned int mx, unsigned int my)
-{
-  // TODO(orduno): check usage of this function, might instead be a request to
-  //               world_model / map server
-  costmap_->setCost(mx, my, nav2_costmap_2d::FREE_SPACE);
-}
 
 rcl_interfaces::msg::SetParametersResult
 CoopPlanner::dynamicParametersCallback(std::vector<rclcpp::Parameter> parameters)
@@ -502,6 +531,8 @@ CoopPlanner::dynamicParametersCallback(std::vector<rclcpp::Parameter> parameters
 }
 
 }  // namespace nav2_cooperative_planner
+
+
 
 #include "pluginlib/class_list_macros.hpp"
 PLUGINLIB_EXPORT_CLASS(nav2_cooperative_planner::CoopPlanner, nav2_core::GlobalPlanner)

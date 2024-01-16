@@ -67,11 +67,6 @@ void AStar::Generator::setHeuristic(HeuristicFunction heuristic_)
     heuristic = std::bind(heuristic_, _1, _2);
 }
 
-void AStar::Generator::addCollision(Vec2i coordinates_)
-{
-    walls.push_back(coordinates_);
-}
-
 void AStar::Generator::removeCollision(Vec2i coordinates_)
 {
     auto it = std::find(walls.begin(), walls.end(), coordinates_);
@@ -121,10 +116,7 @@ AStar::CoordinateList AStar::Generator::findPath()
                 continue;
             }
             
-            // uint totalCost = current->G + ((i < 8) ? 10 : 14);
             uint totalCost = current->G + direction_costs[i];
-            // std::cout << "MEGAPD " << direction_costs[i] << "  " << i << "\n" << std::flush;
-            // std::cout << totalCost << "\n";
 
             std::shared_ptr<Node> successor = findNodeOnList(openSet, newCoordinates);
             if (successor == nullptr) {
@@ -218,14 +210,16 @@ void AStar::Generator::setGoal(Vec2i target_)
 
 bool AStar::Generator::setCostmap(std::vector<int> costmap)
 {
-    for(int x=0;x<this->worldSize.x;x++)
+    for(int z=0;z<this->worldSize.z;z++)
     {
-        for(int y=0;y<this->worldSize.y;y++)
+        for(int x=0;x<this->worldSize.x;x++)
         {
-            if(costmap[y*this->worldSize.x + x] > 10)
+            for(int y=0;y<this->worldSize.y;y++)
             {
-                this->addCollision({x,y,0});
-                
+                if(costmap[z * (this->worldSize.x * this->worldSize.y) + y * this->worldSize.x + x] > 10)
+                {
+                    this->walls.push_back({x,y,z});
+                }
             }
         }
     }

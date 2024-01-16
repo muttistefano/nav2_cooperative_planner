@@ -206,13 +206,6 @@ protected:
   void mapToWorld(double mx, double my, double & wx, double & wy);
 
   /**
-   * @brief Set the corresponding cell cost to be free space
-   * @param mx int of map X coordinate
-   * @param my int of map Y coordinate
-   */
-  void clearRobotCell(unsigned int mx, unsigned int my);
-
-  /**
    * @brief Determine if a new planner object should be made
    * @return true if planner object is out of date
    */
@@ -251,6 +244,10 @@ protected:
 
   // int * merged_map;
   std::vector<int> merged_map;
+
+  const int    discretization = 20;
+  const double angle_disc     = 0.15;
+  double angl_lf = 0.0;
 
   ///////////////////////////////////
 
