@@ -31,9 +31,9 @@ void AStar::Generator::reset(){};
 
 AStar::Generator::Generator()
 {
-    setHeuristic(&Heuristic::octagonal);
+    setHeuristic(&Heuristic::manhattan);
     direction = {{ 1, 1, 0 }, { 1, 0, 0 }, { 1,-1, 0 }, { 0,-1, 0 },{-1,-1, 0 }, {-1, 0, 0 }, {-1, 1, 0 }, { 0, 1, 0 }, { 0, 0, 1 },{ 0, 0, -1 }};
-    direction_costs = {14,10,14,10,14,10,14,10,2,2};
+    direction_costs = {14,10,14,10,14,10,14,10,10,10};
 }
 
 void AStar::Generator::setWorldSize(Vec2i worldSize_)
@@ -87,14 +87,14 @@ AStar::CoordinateList AStar::Generator::findPath()
         // #pragma omp parallel for
         for (uint i = 0; i < 10; i++) {
             Vec2i newCoordinates(current->coordinates + direction[i]);
-            auto start_time2 = high_resolution_clock::now();
+
             if (detectCollision(newCoordinates) || findNodeOnList(closedSet, newCoordinates)) {
                 continue;
             }
-            auto stop_time2 = high_resolution_clock::now();
-            auto duration2 = duration_cast<microseconds>(stop_time2 - start_time2);
 
-            uint totalCost = current->G + direction_costs[i] 
+
+            // auto start_time3 = high_resolution_clock::now();
+            uint totalCost = current->G + 10 * direction_costs[i] 
             + (*costmap_a_)[current->coordinates.z * (this->worldSize.x * this->worldSize.y) + current->coordinates.y * this->worldSize.x + current->coordinates.x];
 
             std::shared_ptr<Node> successor = findNodeOnList(openSet, newCoordinates);
@@ -108,6 +108,9 @@ AStar::CoordinateList AStar::Generator::findPath()
                 successor->parent = current;
                 successor->G = totalCost;
             }
+            // auto stop_time3 = high_resolution_clock::now();
+            // auto duration3 = duration_cast<microseconds>(stop_time3 - start_time3);
+            // RCLCPP_INFO_STREAM(rclcpp::get_logger("nav2_coop"), "ph2 ->" << duration3.count());
         }
 
     }
@@ -166,20 +169,23 @@ AStar::uint AStar::Heuristic::euclidean(Vec2i source_, Vec2i target_)
 {
     auto delta = std::move(getDelta(source_, target_));
     //TODO fix
-    return static_cast<uint>(10 * sqrt(pow(delta.x, 2) + pow(delta.y, 2) + pow(delta.z, 2)));
+    // return static_cast<uint>(20 * sqrt(pow(delta.x, 2) + pow(delta.y, 2) + pow(delta.z, 2)));
+    return static_cast<uint>(20 * sqrt(pow(delta.x, 2) + pow(delta.y, 2)));
 }
 
 AStar::uint AStar::Heuristic::octagonal(Vec2i source_, Vec2i target_)
 {
     auto delta = std::move(getDelta(source_, target_));
-    return 10 * (delta.x + delta.y + delta.z) + (-6) * std::min({delta.x, delta.y});
+    return 10 * (delta.x + delta.y + delta.z) + (-6) * std::min({delta.x, delta.y, delta.z});
+    // return 10 * (delta.x + delta.y ) + (-6) * std::min({delta.x, delta.y});
     //TODO fix this
 }
 
 AStar::uint AStar::Heuristic::manhattan(Vec2i source_, Vec2i target_)
 {
     auto delta = std::move(getDelta(source_, target_));
-    return static_cast<uint>(10 * (delta.x + delta.y));
+    // return static_cast<uint>(10 * (delta.x + delta.y));
+    return static_cast<uint>(180 * (delta.x + delta.y + delta.z));
 }
 
 void AStar::Generator::setStart(Vec2i source_)
@@ -195,7 +201,6 @@ void AStar::Generator::setGoal(Vec2i target_)
 
 bool AStar::Generator::setCostmap(std::vector<int> costmap)
 {
-
     this->costmap_a_ = std::make_shared<std::vector<int>>(costmap);
     return true;
 }
