@@ -12,8 +12,11 @@
 #include <iostream>
 #include <chrono>
 #include <memory>
+#include "rclcpp/logging.hpp"
+#include <omp.h>
 
-
+using namespace std::chrono_literals;
+using namespace std::chrono;  // NOLINT
 
 namespace AStar
 {
@@ -61,19 +64,18 @@ namespace AStar
         Vec2i getStart() const {return source_pt;};
         void setGoal(Vec2i target_);
         Vec2i getGoal() const {return goal_pt;};
-        void removeCollision(Vec2i coordinates_);
-        void clearCollisions();
         void reset();
         bool setCostmap(std::vector<int> costmap);
 
     private:
         HeuristicFunction heuristic;
         CoordinateList direction;
-        CoordinateList walls;
         Vec2i worldSize;
         std::vector<uint> direction_costs;
+        std::vector<uint> allowed;
         Vec2i source_pt;
         Vec2i goal_pt;
+        std::shared_ptr<std::vector<int>> costmap_a_;
 
 
     };
@@ -87,6 +89,10 @@ namespace AStar
         static uint octagonal(Vec2i source_, Vec2i target_);
         static uint manhattan(Vec2i source_, Vec2i target_);
     };
+}
+
+template <typename T> int sgn(T val) {
+    return (T(0) < val) - (val < T(0));
 }
 
 #endif // __ASTAR_HPP_8F637DB91972F6C878D41D63F7E7214F__

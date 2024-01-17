@@ -248,6 +248,7 @@ protected:
   const int    discretization = 20;
   const double angle_disc     = 0.15;
   double angl_lf = 0.0;
+  int z_goal_disc = 0;
 
   ///////////////////////////////////
 

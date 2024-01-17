@@ -319,6 +319,17 @@ nav_msgs::msg::Path CoopPlanner::createPlan(
     }
   }
 
+  auto goal_yaw   = ToEulerAngles(goal.pose.orientation.z,goal.pose.orientation.w);
+  auto map_lead_a = ToEulerAngles(_tf_map_lead_.transform.rotation.z,_tf_map_lead_.transform.rotation.w);
+  auto z_goal     = (- map_lead_a + goal_yaw);
+  if(z_goal >  M_PI) {z_goal = z_goal - 2 * M_PI;}
+  if(z_goal < -M_PI) {z_goal = z_goal + 2 * M_PI;}
+  z_goal_disc = static_cast<int>(z_goal/angle_disc);
+  // RCLCPP_INFO_STREAM(this->logger_,"m_goal ->  " << map_lead_a << "\n");
+  // RCLCPP_INFO_STREAM(this->logger_,"goal_yaw ->  " << goal_yaw << "\n");
+  // RCLCPP_INFO_STREAM(this->logger_,"z_goal ->  " << z_goal << "\n");
+  RCLCPP_INFO_STREAM(this->logger_,"z_goal_disc ->  " << z_goal_disc << "\n");
+
   costmap_raw_ = std::make_unique<nav_msgs::msg::OccupancyGrid>();
   costmap_raw_->info.resolution = (float)resolution;
   costmap_raw_->info.width = lead_x;
@@ -328,7 +339,7 @@ nav_msgs::msg::Path CoopPlanner::createPlan(
   costmap_raw_->header.frame_id = global_frame_;
 
   costmap_raw_->data.resize(lead_x*lead_y);
-  for(int ix = (lead_x*lead_y) * discretization , cc = 0 ; ix < (lead_x*lead_y) * (discretization + 1) ; ix++ , cc++)
+  for(int ix = (lead_x*lead_y) * (discretization - z_goal_disc) , cc = 0 ; ix < (lead_x*lead_y) * ((discretization - z_goal_disc) + 1) ; ix++ , cc++)
   {
     costmap_raw_->data.at(cc) = (cost_translation_table_[merged_map[ix]]);
   }
@@ -402,25 +413,12 @@ CoopPlanner::makePlan(
   wx = goal.position.x;
   wy = goal.position.y;
 
-  auto goal_yaw   = ToEulerAngles(goal.orientation.z,goal.orientation.w);
-  auto map_lead_a = ToEulerAngles(_tf_map_lead_.transform.rotation.z,_tf_map_lead_.transform.rotation.w);
-  // auto z_goal     = (- map_lead_a + goal_yaw)/angle_disc;
-  auto z_goal     = (- map_lead_a + goal_yaw);
-  if(z_goal >  M_PI) {z_goal = z_goal - 2 * M_PI;}
-  if(z_goal < -M_PI) {z_goal = z_goal + 2 * M_PI;}
-  auto z_goal_disc = static_cast<int>(z_goal/angle_disc);
-  // RCLCPP_INFO_STREAM(this->logger_,"m_goal ->  " << map_lead_a << "\n");
-  // RCLCPP_INFO_STREAM(this->logger_,"goal_yaw ->  " << goal_yaw << "\n");
-  // RCLCPP_INFO_STREAM(this->logger_,"z_goal ->  " << z_goal << "\n");
-  RCLCPP_INFO_STREAM(this->logger_,"z_goal_disc ->  " << z_goal_disc << "\n");
-
   worldToMap(wx, wy, mx, my);
   planner_->setGoal({(int)mx,(int)my,discretization - z_goal_disc});
   RCLCPP_INFO_STREAM(this->logger_,"plan goal : " << (int)mx << " " << (int)my << " "  << discretization - z_goal_disc);
   
   auto saa = high_resolution_clock::now();
   AStar::CoordinateList plan_out = planner_->findPath();
-  planner_->clearCollisions();
   auto sae = high_resolution_clock::now();
   auto drr = duration_cast<microseconds>(sae - saa);
 
@@ -435,7 +433,7 @@ CoopPlanner::makePlan(
   for (int i = len - 1; i >= 0; --i) {
     double world_x, world_y;
     mapToWorld(plan_out[i].x, plan_out[i].y, world_x, world_y);
-    RCLCPP_INFO_STREAM(this->logger_ ,"Path : " << plan_out[i].x << " " << plan_out[i].y << " " << plan_out[i].z << "\n");
+    // RCLCPP_INFO_STREAM(this->logger_ ,"Path : " << plan_out[i].x << " " << plan_out[i].y << " " << plan_out[i].z << "\n");
     geometry_msgs::msg::PoseStamped pose;
     pose.pose.position.x = world_x;
     pose.pose.position.y = world_y;
