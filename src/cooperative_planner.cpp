@@ -43,6 +43,10 @@ using nav2_util::declare_parameter_if_not_declared;
 using rcl_interfaces::msg::ParameterType;
 using std::placeholders::_1;
 
+template <typename T> int sgn(T val) {
+    return (T(0) < val) - (val < T(0));
+}
+
 namespace nav2_cooperative_planner
 {
 
@@ -84,6 +88,8 @@ CoopPlanner::configure(
   node->get_parameter(name + ".tolerance", tolerance_);
   declare_parameter_if_not_declared(node, name + ".allow_unknown", rclcpp::ParameterValue(true));
   node->get_parameter(name + ".allow_unknown", allow_unknown_);
+    declare_parameter_if_not_declared(node, name + ".transportation", rclcpp::ParameterValue(true));
+  node->get_parameter(name + ".transportation", transportation_);
   declare_parameter_if_not_declared(
     node, name + ".use_final_approach_orientation", rclcpp::ParameterValue(false));
   node->get_parameter(name + ".use_final_approach_orientation", use_final_approach_orientation_);
@@ -211,8 +217,6 @@ nav_msgs::msg::Path CoopPlanner::createPlan(
     cost_translation_table_[i] = static_cast<char>(1 + (97 * (i - 1)) / 251);
   }
 
-  auto start_time = high_resolution_clock::now();
-
   try {
       _tf_map_foll_ = _tf_buffer->lookupTransform(
        global_frame_,follower_frame_,
@@ -249,7 +253,7 @@ nav_msgs::msg::Path CoopPlanner::createPlan(
   if (isPlannerOutOfDate()) {
     planner_->setWorldSize({
       static_cast<int>(costmap_->getSizeInCellsX()),
-      static_cast<int>(costmap_->getSizeInCellsY()),1});
+      static_cast<int>(costmap_->getSizeInCellsY())});
       RCLCPP_WARN_STREAM(this->logger_,"Planner out of date \n");
 
   }
@@ -263,9 +267,8 @@ nav_msgs::msg::Path CoopPlanner::createPlan(
   const unsigned char * lead_map =  costmap_->getCharMap();
   const unsigned char * foll_map =  costmap_follower_->getCharMap();
 
-  // merged_map =  new int[lead_x*lead_y]();
-  // std::vector<int> merged_map;
-  // qualcosa non viene pulito prova a fare u plan semplice 100 volte di fila e vedi se il tempo cresce
+  auto start_time = high_resolution_clock::now();
+
   merged_map.resize(static_cast<std::size_t>(lead_x*lead_y));
   std::fill(merged_map.begin(), merged_map.end(), 0);
   
@@ -275,25 +278,65 @@ nav_msgs::msg::Path CoopPlanner::createPlan(
   auto shift_x = int((map_to_lead.getOrigin().x() - map_to_foll.getOrigin().x())/resolution);
   auto shift_y = int((map_to_lead.getOrigin().y() - map_to_foll.getOrigin().y())/resolution);
 
-  // TODO is slower with omp ?? fix
-  // #pragma omp parallel for
-  for(int x=0;x<lead_x;x++)
+  int xxyylen = std::max(std::abs(shift_x),std::abs(shift_y));
+  std::vector<int> x_vec;
+  x_vec.reserve(xxyylen);
+  std::vector<int> y_vec;
+  y_vec.reserve(xxyylen);
+
+  for(int pd = 0 ; pd < xxyylen ; pd++)
   {
-    for(int y=0;y<lead_y;y++)
+    x_vec.push_back(static_cast<int>( (shift_x/xxyylen) * pd ));
+    y_vec.push_back(static_cast<int>( (shift_y/xxyylen) * pd ));
+  }
+
+
+  if(this->transportation_)
+  {
+    for(int x=0;x<lead_x;x++)
     {
-      int idx = y * lead_x + x;
-      merged_map[idx] = static_cast<int>(lead_map[idx]/2);
-      int idx_2_x = ((x-shift_x) > 0) && ((x-shift_x) < lead_x) ?  (x-shift_x)  : 0 ;
-      int idx_2_y = ((y-shift_y) > 0) && ((y-shift_y) < lead_y) ?  (y-shift_y)  : 0 ;
-      // //TODO fix is not 0
-      if ((idx_2_x==0) || (idx_2_y==0))
+      for(int y=0;y<lead_y;y++)
       {
-        continue;
+        int idx         = y * lead_x + x;
+        merged_map[idx] = static_cast<int>(lead_map[idx]/2);
+
+        std::vector<int> vals ;
+        for(int pd = 0 ; pd < xxyylen ; pd++)
+        {
+          int idx_2_xx     = ((x-x_vec[pd]) > 0) && ((x-x_vec[pd]) < lead_x) ?  (x-x_vec[pd])  : 0 ;
+          int idx_2_yy     = ((y-y_vec[pd]) > 0) && ((y-y_vec[pd]) < lead_y) ?  (y-y_vec[pd])  : 0 ;
+          int idx_22       = idx_2_yy * lead_x + idx_2_xx;
+          vals.push_back(foll_map[idx_22]);
+
+        }
+
+        // int idx_2 = idx_2_y * lead_x + idx_2_x;
+        // merged_map[idx] = std::max(merged_map[idx],(foll_map[idx_2]/2));
+        merged_map[idx] = *std::max_element(vals.begin(), vals.end());
+
       }
+    }
+  }
+  else
+  {
+    for(int x=0;x<lead_x;x++)
+    {
+      for(int y=0;y<lead_y;y++)
+      {
+        int idx = y * lead_x + x;
+        merged_map[idx] = static_cast<int>(lead_map[idx]);
+        int idx_2_x = ((x-shift_x) > 0) && ((x-shift_x) < lead_x) ?  (x-shift_x)  : 0 ;
+        int idx_2_y = ((y-shift_y) > 0) && ((y-shift_y) < lead_y) ?  (y-shift_y)  : 0 ;
+        // //TODO fix is not 0
+        if ((idx_2_x==0) || (idx_2_y==0))
+        {
+          continue;
+        }
 
-      int idx_2 = idx_2_y * lead_x + idx_2_x;
-      merged_map[idx] = std::max(merged_map[idx],(static_cast<int>(foll_map[idx_2]/2)));
+        int idx_2 = idx_2_y * lead_x + idx_2_x;
+        merged_map[idx] = std::max(merged_map[idx],(static_cast<int>(foll_map[idx_2])));
 
+      }
     }
   }
 
@@ -371,19 +414,18 @@ CoopPlanner::makePlan(
 
   lock.unlock();
 
-  planner_->setStart({(int)mx,(int)my,0});
+  planner_->setStart({(int)mx,(int)my});
   RCLCPP_INFO_STREAM(this->logger_,"plan start : " << (int)mx << " " << (int)my);
 
   wx = goal.position.x;
   wy = goal.position.y;
 
   worldToMap(wx, wy, mx, my);
-  planner_->setGoal({(int)mx,(int)my,0});
+  planner_->setGoal({(int)mx,(int)my});
   RCLCPP_INFO_STREAM(this->logger_,"plan goal : " << (int)mx << " " << (int)my);
   
   auto saa = high_resolution_clock::now();
   AStar::CoordinateList plan_out = planner_->findPath();
-  planner_->clearCollisions();
   auto sae = high_resolution_clock::now();
   auto drr = duration_cast<microseconds>(sae - saa);
 
@@ -494,6 +536,9 @@ CoopPlanner::dynamicParametersCallback(std::vector<rclcpp::Parameter> parameters
     } else if (type == ParameterType::PARAMETER_BOOL) {
       if (name == name_ + ".use_final_approach_orientation") {
         use_final_approach_orientation_ = parameter.as_bool();
+      }
+      if (name == name_ + ".transportation") {
+        transportation_ = parameter.as_bool();
       }
     }
   }

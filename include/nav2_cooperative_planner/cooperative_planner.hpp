@@ -258,7 +258,7 @@ protected:
   std::string global_frame_, name_, follower_frame_,leader_frame_, follower_costmap_;
 
   // Whether or not the planner should be allowed to plan through unknown space
-  bool allow_unknown_, use_final_approach_orientation_;
+  bool allow_unknown_, use_final_approach_orientation_, transportation_;
 
   // If the goal is obstructed, the tolerance specifies how many meters the planner
   // can relax the constraint in x and y before failing

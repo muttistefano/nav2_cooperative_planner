@@ -12,6 +12,9 @@
 #include <iostream>
 #include <chrono>
 #include <memory>
+#include "rclcpp/logging.hpp"
+#include "rclcpp/rclcpp.hpp"
+#include "geometry_msgs/msg/point_stamped.hpp"
 
 
 
@@ -19,12 +22,12 @@ namespace AStar
 {
     struct Vec2i
     {
-        int x, y, z;
+        int x, y;
 
         bool operator == (const Vec2i& coordinates_);
         friend std::ostream& operator << (std::ostream& os, const Vec2i& coordinates_)
         {   
-            os << coordinates_.x << ' ' << coordinates_.y << ' ' << coordinates_.z;
+            os << coordinates_.x << ' ' << coordinates_.y;
             return os;
         };
     };
@@ -33,22 +36,22 @@ namespace AStar
     using HeuristicFunction = std::function<uint(Vec2i, Vec2i)>;
     using CoordinateList = std::vector<Vec2i>;
 
-    struct Node
+    struct ANode
     {
         uint G, H;
         Vec2i coordinates;
-        std::shared_ptr<Node> parent;
+        std::shared_ptr<ANode> parent;
 
-        Node(Vec2i coord_, std::shared_ptr<Node> parent_ = nullptr);
+        ANode(Vec2i coord_, std::shared_ptr<ANode> parent_ = nullptr);
         uint getScore() const;
     };
 
-    using NodeSet = std::vector<std::shared_ptr<Node>>;
+    using NodeSet = std::vector<std::shared_ptr<ANode>>;
 
-    class Generator
+    class Generator : public rclcpp::Node
     {
         bool detectCollision(Vec2i coordinates_);
-        std::shared_ptr<Node> findNodeOnList(NodeSet& nodes_, Vec2i coordinates_);
+        std::shared_ptr<ANode> findNodeOnList(NodeSet& nodes_, Vec2i coordinates_);
         void releaseNodes(NodeSet& nodes_);
 
     public:
@@ -61,20 +64,19 @@ namespace AStar
         Vec2i getStart() const {return source_pt;};
         void setGoal(Vec2i target_);
         Vec2i getGoal() const {return goal_pt;};
-        void addCollision(Vec2i coordinates_);
-        void removeCollision(Vec2i coordinates_);
-        void clearCollisions();
         void reset();
         bool setCostmap(std::vector<int> costmap);
 
     private:
         HeuristicFunction heuristic;
         CoordinateList direction;
-        CoordinateList walls;
         Vec2i worldSize;
         std::vector<uint> direction_costs;
         Vec2i source_pt;
         Vec2i goal_pt;
+        std::shared_ptr<std::vector<int>> costmap_a_;
+        rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr publisher_;
+
 
 
     };
