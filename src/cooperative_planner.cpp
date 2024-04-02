@@ -237,7 +237,7 @@ nav_msgs::msg::Path CoopPlanner::createPlan(
       global_frame_.c_str(), leader_frame_.c_str(), ex.what());
   }
 
-  tf2::Stamped<tf2::Transform> map_to_foll,map_to_lead;
+  tf2::Stamped<tf2::Transform> map_to_foll, map_to_lead;
 
   tf2::fromMsg(_tf_map_foll_, map_to_foll);
   tf2::fromMsg(_tf_map_lead_, map_to_lead);
@@ -257,6 +257,8 @@ nav_msgs::msg::Path CoopPlanner::createPlan(
       RCLCPP_WARN_STREAM(this->logger_,"Planner out of date \n");
 
   }
+
+  //TODO follow e leader map have the same size
 
   RCLCPP_INFO_STREAM(this->logger_,"Bounds " << lead_x << " "<< lead_y << " "<< foll_x << " "<< foll_y << "\n");
 
